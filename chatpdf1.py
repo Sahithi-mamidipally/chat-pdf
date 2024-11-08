@@ -14,8 +14,11 @@ from dotenv import load_dotenv
 st.set_page_config(page_title="Chat PDF", page_icon="💁")
 
 load_dotenv()
-os.getenv("GOOGLE_API_KEY")
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+api_key = os.getenv("GOOGLE_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+else:
+    st.error("GOOGLE_API_KEY environment variable not found. Please check your .env file.")
 
 # Set up dark mode state
 if "dark_mode" not in st.session_state:
@@ -28,7 +31,6 @@ def inject_css(dark_mode):
     placeholder_color = "#ffffff" if dark_mode else "#666666"
     css = f"""
     <style>
-    /* General Styling */
     body {{
         background-color: {"#1e1e1e" if dark_mode else "#D3F3F6"};
         color: {"#e0e0e0" if dark_mode else "#333333"};
@@ -37,23 +39,17 @@ def inject_css(dark_mode):
         background-color: {"#1e1e1e" if dark_mode else "#D3F3F6"};
         color: {"#e0e0e0" if dark_mode else "#333333"};
     }}
-
-    /* Header */
     .header {{
         font-size: 24px;
         font-weight: bold;
         color: {"#ffffff" if dark_mode else "#000000"};
         margin-bottom: 10px;
     }}
-
-    /* Sidebar styling */
     .css-1d391kg.e1fqkh3o3 {{
         background-color: {"#333333" if dark_mode else "#ffffff"};
         color: {"#ffffff" if dark_mode else "#000000"};
         border-right: 1px solid {"#555555" if dark_mode else "#cccccc"};
     }}
-
-    /* Text Input */
     .stTextInput input {{
         background-color: {"#333333" if dark_mode else "#ffffff"};
         color: {"#ffffff" if dark_mode else "#333333"};
@@ -63,8 +59,6 @@ def inject_css(dark_mode):
     .stTextInput input::placeholder {{
         color: {placeholder_color};
     }}
-
-    /* Button */
     .stButton>button {{
         background-color: {"#555555" if dark_mode else "#D3F3F6"};
         color: {"#ffffff" if dark_mode else "#00000"};
@@ -101,7 +95,6 @@ def get_conversational_chain():
     provided context, say "answer is not available in the context"; do not provide a wrong answer.\n\n
     Context:\n {context}\n
     Question:\n {question}\n
-
     Answer:
     """
     model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
@@ -111,7 +104,12 @@ def get_conversational_chain():
 
 def user_input(user_question):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    new_db = FAISS.load_local("faiss_index", embeddings)
+    try:
+        new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    except ValueError as e:
+        st.error("Error loading FAISS index: " + str(e))
+        return
+    
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
     response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
